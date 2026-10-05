@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cuestionario CaMir</title>
+<style>
+  :root{
+    --bg:#f7f7f5; --card:#ffffff; --ink:#2b2b28; --muted:#6b6b64;
+    --accent:#4a5d54; --accent-light:#e7ede9; --border:#e2e0da; --err:#a33d3d;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height:1.5;
+  }
+  .wrap{max-width:680px; margin:0 auto; padding:32px 20px 80px;}
+  header{margin-bottom:28px;}
+  h1{font-size:1.4rem; margin:0 0 6px;}
+  .sub{color:var(--muted); font-size:0.92rem;}
+  .item{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:18px 20px; margin-bottom:14px;
+  }
+  .item-n{font-size:0.78rem; color:var(--muted); margin-bottom:6px;}
+  .item-text{margin:0 0 14px; font-size:1rem;}
+  .opts{display:flex; flex-direction:column; gap:8px;}
+  .opt{
+    display:flex; align-items:center; gap:10px; padding:8px 10px;
+    border-radius:7px; border:1px solid transparent; cursor:pointer;
+  }
+  .opt:hover{background:var(--accent-light);}
+  .opt input{accent-color:var(--accent);}
+  .opt.checked{background:var(--accent-light); border-color:var(--accent);}
+  .opt span{font-size:0.94rem;}
+  .missing{border-color:var(--err) !important;}
+  .missing-note{color:var(--err); font-size:0.85rem; margin-top:6px; display:none;}
+  .actions{position:sticky; bottom:0; background:linear-gradient(transparent, var(--bg) 40%); padding:20px 0 0;}
+  button{
+    width:100%; padding:14px; font-size:1rem; border:none; border-radius:10px;
+    background:var(--accent); color:#fff; cursor:pointer;
+  }
+  button:disabled{opacity:0.55; cursor:not-allowed;}
+  .status{text-align:center; margin-top:12px; font-size:0.9rem; color:var(--muted);}
+  .done{
+    max-width:520px; margin:120px auto; text-align:center; padding:0 20px;
+  }
+  .done h2{margin-bottom:10px;}
+  .hidden{display:none !important;}
+  .progress{
+    position:sticky; top:0; z-index:5; height:4px; background:var(--border);
+    margin-bottom:24px; border-radius:2px; overflow:hidden;
+  }
+  .progress-bar{height:100%; background:var(--accent); width:0%; transition:width .2s;}
+</style>
+</head>
+<body>
+
+<div class="wrap" id="formView">
+  <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+  <header>
+    <h1>Cuestionario CaMir</h1>
+    <p class="sub">Para cada frase, indique en qué medida se aplica a usted o a su experiencia. No hay respuestas correctas o incorrectas: responda con lo primero que le parezca al leer cada frase.</p>
+  </header>
+
+  <form id="camirForm"></form>
+
+  <div class="actions">
+    <button id="submitBtn" type="button">Enviar respuestas</button>
+    <p class="status" id="statusMsg"></p>
+  </div>
+</div>
+
+<div class="done hidden" id="doneView">
+  <h2>Gracias</h2>
+  <p>Revisaremos esto en la próxima sesión.</p>
+</div>
+
+<script>
+/* ============================================================
+   CONFIGURACIÓN
+   ============================================================ */
+const CONFIG = {
+  // URL del Web App de Google Apps Script (ver guía de despliegue).
+  APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbyUl45F3vor3zkJIcmLHulXTQ9P5vgg5ZuC0PcD9Esdrk3zXH-gzmE91H7q50G_3QHB8g/exec",
+  INCLUIR_PROTOTIPOS: false // Producto 1: siempre false. No modificar sin los datos del ítem 50.
+};
+
+/* ============================================================
+   DATOS DEL INSTRUMENTO — Versión chilena, 71 ítems (Garrido et al., 2009/2012)
+   ============================================================ */
+const ITEMS = [
+{id:1,texto:"En mi familia, las situaciones vividas por cada uno en ambientes fuera de la familia son una fuente de conversación y de enriquecimiento para todos."},
+{id:2,texto:"Cuando niño me dejaban pocas oportunidades para tener mis propias experiencias."},
+{id:3,texto:"Las amenazas de separación o de ruptura de los lazos familiares, son parte de mis recuerdos infantiles."},
+{id:4,texto:"En mi familia, cada uno expresa sus emociones sin temer a las reacciones de los otros."},
+{id:5,texto:"Mis padres eran incapaces de tener autoridad cuando era necesario."},
+{id:6,texto:"En caso de necesidad, estoy seguro que puedo contar con mis seres queridos para encontrar consuelo."},
+{id:7,texto:"Desearía que mis hijos fueran más autónomos o independientes de lo que yo he sido."},
+{id:8,texto:"En la vida familiar el respeto a los padres es muy importante."},
+{id:9,texto:"Cuando niño, sabía que siempre encontraría consuelo en mis seres queridos."},
+{id:10,texto:"Pienso que he sabido devolver a mis padres el cariño que ellos me han dado."},
+{id:11,texto:"Las relaciones con mis seres queridos durante mi niñez me parecen, en general, positivas."},
+{id:12,texto:"Detesto el sentimiento de depender de los demás."},
+{id:13,texto:"Aunque sea difícil de admitir, siento cierto rencor hacia mis padres."},
+{id:14,texto:"Sólo cuento conmigo para resolver mis problemas."},
+{id:15,texto:"Cuando niño, a menudo mis seres queridos se mostraban impacientes e irritables."},
+{id:16,texto:"Cuando era niño, mis padres habían renunciado a su papel de padres."},
+{id:17,texto:"Para poder superar una pérdida o un duelo, es mejor no lamentarse demasiado."},
+{id:18,texto:"Frecuentemente dedico tiempo a conversar con mis seres queridos."},
+{id:19,texto:"Mis seres queridos siempre me han dado lo mejor de sí mismos."},
+{id:20,texto:"Saber que alguno de mis seres queridos tiene problemas me preocupa tanto que no puedo concentrarme en otra cosa."},
+{id:21,texto:"Cuando niño, encontré suficiente cariño en mis seres queridos como para no buscarlo en otra parte."},
+{id:22,texto:"Siempre estoy preocupado por la pena que podría causar a mis seres queridos si los dejara."},
+{id:23,texto:"Cuando era niño me dejaban hacer todo lo que yo quería."},
+{id:24,texto:"Los adultos deben controlar sus emociones hacia los niños, ya sean de felicidad, de amor o de rabia."},
+{id:25,texto:"Me gusta pensar en mi niñez."},
+{id:26,texto:"En mi adolescencia, nunca nadie de mi entorno entendía realmente mis preocupaciones."},
+{id:27,texto:"En mi familia, cuando uno de nosotros tiene un problema, los otros se sienten involucrados."},
+{id:28,texto:"Actualmente, creo comprender las actitudes de mis padres durante mi niñez."},
+{id:29,texto:"Mis deseos de niño no eran muy tomados en cuenta por los adultos de mi entorno."},
+{id:30,texto:"Cuando era niño los adultos me parecían preocupados, sobretodo, por sus propios problemas."},
+{id:31,texto:"Cuando era niño teníamos mucha dificultad para tomar decisiones en familia."},
+{id:32,texto:"Tengo la sensación que nunca superaría la muerte de uno de mis seres queridos."},
+{id:33,texto:"Cuando era niño le tenía miedo a mis padres."},
+{id:34,texto:"Los niños deben sentir que existe una autoridad respetada dentro de la familia."},
+{id:35,texto:"Mis padres no se han dado cuenta que un niño(a), cuando crece, tiene necesidad de tener su propia vida."},
+{id:36,texto:"Me siento en confianza con mis seres queridos."},
+{id:37,texto:"Realmente no me acuerdo de qué manera veía las cosas cuando era niño."},
+{id:38,texto:"En mi familia de origen, conversábamos más sobre los demás que sobre nosotros mismos."},
+{id:39,texto:"Cuando niño me preocupaba que me abandonaran."},
+{id:40,texto:"Cuando niño me estimularon a compartir mis sentimientos."},
+{id:41,texto:"No me han preparado psicológicamente lo suficiente para la realidad de la vida."},
+{id:42,texto:"Mis padres me dieron demasiada libertad para hacer todo lo que yo quería."},
+{id:43,texto:"Los padres deben mostrarle a su hijo(a) que ellos se quieren."},
+{id:44,texto:"Cuando niño, hacía que los adultos se enfrentaran entre ellos para conseguir lo que yo quería."},
+{id:45,texto:"Cuando niño tuve que enfrentarme a la violencia de uno de mis seres queridos."},
+{id:46,texto:"No logro tener una idea clara de mis padres y de la relación que yo tenía con ellos."},
+{id:47,texto:"No me han dejado disfrutar mi niñez."},
+{id:48,texto:"Yo era un niño miedoso."},
+{id:49,texto:"Es esencial trasmitir al niño(a) el sentido de la familia."},
+{id:50,texto:"A partir de mi experiencia de niño, me he dado cuenta que uno nunca es lo suficientemente bueno para sus padres."},
+{id:51,texto:"Tengo dificultad para recordar con precisión los acontecimientos de mi infancia."},
+{id:52,texto:"Tengo la sensación de no haber podido apoyarme en el ambiente donde crecí (familia, amigos, barrio, trabajo)."},
+{id:53,texto:"Aunque no sea cierto, yo siento que tuve los mejores padres del mundo."},
+{id:54,texto:"Cuando niño, se preocupaban tanto por mi salud y mi seguridad, que me sentía atrapado."},
+{id:55,texto:"Cuando niño, me inculcaron el temor a expresar mi opinión personal."},
+{id:56,texto:"Cuando me alejo de mis seres queridos, no me siento bien conmigo mismo."},
+{id:57,texto:"Nunca he tenido una verdadera relación con mis padres."},
+{id:58,texto:"Mis padres siempre han tenido confianza en mí."},
+{id:59,texto:"Cuando era niño mis padres abusaban de su autoridad."},
+{id:60,texto:"Cada vez que trato de pensar en los aspectos buenos de mis padres, recuerdo los malos."},
+{id:61,texto:"Tengo la sensación de haber sido un niño rechazado."},
+{id:62,texto:"Mis padres no podían evitar controlarlo todo, mi apariencia, mis resultados escolares e incluso mis amigos."},
+{id:63,texto:"Cuando era niño había peleas insoportables en casa."},
+{id:64,texto:"En mi familia vivíamos aislados de los demás."},
+{id:65,texto:"Es importante que el niño(a) aprenda a obedecer."},
+{id:66,texto:"Cuando niño, mis seres queridos me hacían sentir que les gustaba compartir su tiempo conmigo."},
+{id:67,texto:"Cuando recuerdo mi infancia siento un vacío afectivo."},
+{id:68,texto:"La idea de separarme momentáneamente de uno de mis seres queridos, me deja una sensación de inquietud."},
+{id:69,texto:"Hay un buen entendimiento entre los miembros de mi familia."},
+{id:70,texto:"Durante mi niñez, sufrí la indiferencia de mis seres queridos."},
+{id:71,texto:"A menudo, me siento preocupado sin razón por la salud de mis seres queridos."}
+];
+
+const OPCIONES = [
+  {valor:5, etiqueta:"Muy verdadero"},
+  {valor:4, etiqueta:"Verdadero"},
+  {valor:3, etiqueta:"Ni verdadero ni falso"},
+  {valor:2, etiqueta:"Falso"},
+  {valor:1, etiqueta:"Muy falso"}
+];
+
+// Asignación ítem -> escala (validada: 71 ítems, sin duplicados, versión chilena)
+const ESCALAS = {
+  A:{nombre:"Interferencia Parental", items:[7,35,39,48,54,62], norma:{m:2.52,de:0.63}},
+  B:{nombre:"Preocupación Familiar", items:[20,22,32,56,68,71], norma:{m:3.32,de:0.81}},
+  C:{nombre:"Resentimiento de Infantilización", items:[2,26,41,52,55,64], norma:{m:2.19,de:0.73}},
+  D:{nombre:"Apoyo Parental", items:[9,21,40,53,58,66], norma:{m:3.89,de:0.74}},
+  E:{nombre:"Apoyo Familiar", items:[1,4,18,27,36,69], norma:{m:3.82,de:0.71}},
+  F:{nombre:"Reconocimiento de Apoyo", items:[6,10,11,19,25,28], norma:{m:4.05,de:0.65}},
+  G:{nombre:"Indisponibilidad Parental", items:[15,29,30,31,38,70], norma:{m:2.35,de:0.73}},
+  H:{nombre:"Distancia Familiar", items:[12,14,17], norma:{m:2.72,de:0.87}},
+  I:{nombre:"Resentimiento de Rechazo", items:[13,47,50,57,60,67], norma:{m:1.99,de:0.83}},
+  J:{nombre:"Traumatismo Parental", items:[3,33,45,59,61,63], norma:{m:1.96,de:0.83}},
+  K:{nombre:"Bloqueo de Recuerdos", items:[37,46,51], norma:{m:2.16,de:0.87}},
+  L:{nombre:"Dimisión Parental", items:[5,16,23,42,44], norma:{m:1.76,de:0.58}},
+  M:{nombre:"Valoración de Jerarquía", items:[8,24,34,43,49,65], norma:{m:4.18,de:0.45}}
+};
+
+/* ============================================================
+   MOTOR DE CÁLCULO (función pura — no toca el DOM)
+   ============================================================ */
+function calcularEscalas(respuestas){
+  const resultado = {};
+  for(const [letra, esc] of Object.entries(ESCALAS)){
+    const valores = esc.items.map(id => respuestas[id]);
+    const promedio = valores.reduce((a,b)=>a+b,0) / valores.length;
+    const t = ((promedio - esc.norma.m) / esc.norma.de) * 10 + 50;
+    resultado[letra] = {
+      nombre: esc.nombre,
+      promedio: Number(promedio.toFixed(2)),
+      t: Number(t.toFixed(1)),
+      t_redondeado: Math.round(t)
+    };
+  }
+  return resultado;
+}
+
+/* ============================================================
+   UI
+   ============================================================ */
+const form = document.getElementById("camirForm");
+const respuestas = {};
+
+ITEMS.forEach((item, idx) => {
+  const div = document.createElement("div");
+  div.className = "item";
+  div.id = "item-" + item.id;
+
+  const num = document.createElement("div");
+  num.className = "item-n";
+  num.textContent = (idx+1) + " / " + ITEMS.length;
+  div.appendChild(num);
+
+  const p = document.createElement("p");
+  p.className = "item-text";
+  p.textContent = item.texto;
+  div.appendChild(p);
+
+  const opts = document.createElement("div");
+  opts.className = "opts";
+
+  OPCIONES.forEach(op => {
+    const label = document.createElement("label");
+    label.className = "opt";
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "item_" + item.id;
+    input.value = op.valor;
+    input.addEventListener("change", () => {
+      respuestas[item.id] = op.valor;
+      div.classList.remove("missing");
+      const note = div.querySelector(".missing-note");
+      if(note) note.style.display = "none";
+      opts.querySelectorAll(".opt").forEach(o => o.classList.remove("checked"));
+      label.classList.add("checked");
+      actualizarProgreso();
+    });
+    const span = document.createElement("span");
+    span.textContent = op.etiqueta;
+    label.appendChild(input);
+    label.appendChild(span);
+    opts.appendChild(label);
+  });
+
+  div.appendChild(opts);
+
+  const missingNote = document.createElement("p");
+  missingNote.className = "missing-note";
+  missingNote.textContent = "Falta responder esta frase.";
+  div.appendChild(missingNote);
+
+  form.appendChild(div);
+});
+
+function actualizarProgreso(){
+  const pct = Math.round((Object.keys(respuestas).length / ITEMS.length) * 100);
+  document.getElementById("progressBar").style.width = pct + "%";
+}
+
+function obtenerIdPaciente(){
+  const params = new URLSearchParams(window.location.search);
+  return params.get("id") || "sin-identificar";
+}
+
+document.getElementById("submitBtn").addEventListener("click", async () => {
+  const faltantes = ITEMS.filter(i => respuestas[i.id] === undefined);
+  if(faltantes.length > 0){
+    faltantes.forEach(i => {
+      const div = document.getElementById("item-" + i.id);
+      div.classList.add("missing");
+      div.querySelector(".missing-note").style.display = "block";
+    });
+    document.getElementById(faltantes[0].id ? "item-"+faltantes[0].id : "").scrollIntoView({behavior:"smooth", block:"center"});
+    document.getElementById("statusMsg").textContent =
+      "Faltan " + faltantes.length + " frase(s) por responder.";
+    return;
+  }
+
+  const btn = document.getElementById("submitBtn");
+  btn.disabled = true;
+  document.getElementById("statusMsg").textContent = "Enviando…";
+
+  const escalas = calcularEscalas(respuestas);
+  const payload = {
+    id: obtenerIdPaciente(),
+    fecha: new Date().toISOString(),
+    incluyePrototipos: CONFIG.INCLUIR_PROTOTIPOS,
+    escalas: escalas,
+    respuestasCrudas: respuestas
+  };
+
+  try{
+    const res = await fetch(CONFIG.APPS_SCRIPT_URL, {
+      method: "POST",
+      headers: {"Content-Type": "text/plain;charset=utf-8"}, // evita preflight CORS
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => null);
+    if(data && data.ok){
+      mostrarPantallaFinal();
+    } else {
+      throw new Error("Respuesta inesperada del servidor");
+    }
+  }catch(err){
+    document.getElementById("statusMsg").textContent =
+      "No se pudo enviar. Verifique su conexión e intente nuevamente.";
+    btn.disabled = false;
+  }
+});
+
+function mostrarPantallaFinal(){
+  document.getElementById("formView").classList.add("hidden");
+  document.getElementById("doneView").classList.remove("hidden");
+}
+</script>
+</body>
+</html>
